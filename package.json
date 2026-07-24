@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
-    "build": "next build && node -e \"const fs=require('fs'); const path=require('path'); const src=path.join(__dirname,'.next','static'); const dest=path.join(__dirname,'public','_next','static'); if(fs.existsSync(src)){ fs.mkdirSync(dest, { recursive: true }); fs.cpSync(src, dest, { recursive: true }); console.log('> Copied .next/static to public/_next/static for Hostinger static asset serving'); }\"",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
