@@ -35,6 +35,7 @@ const PRESET_SERVICES: ServiceItem[] = [
 
 const CITIES = ['Bangalore', 'Mumbai', 'Delhi NCR', 'Hyderabad', 'Chennai', 'Pune'];
 let cachedCatalog: any = null;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.voloapp.in';
 
 export default function HomeLandingPage() {
   // Navigation & UI States
@@ -98,7 +99,7 @@ export default function HomeLandingPage() {
 
         // Silent background update to keep cache fresh
         try {
-          const res = await fetch('/api/customer/services');
+          const res = await fetch(`${API_BASE_URL}/api/customer/services`);
           if (res.ok) {
             const data = await res.json();
             cachedCatalog = data;
@@ -113,7 +114,7 @@ export default function HomeLandingPage() {
       }
 
       try {
-        const res = await fetch('/api/customer/services');
+        const res = await fetch(`${API_BASE_URL}/api/customer/services`);
         if (res.ok) {
           const data = await res.json();
           cachedCatalog = data;
@@ -209,7 +210,7 @@ export default function HomeLandingPage() {
     try {
       // 1. Pre-check if account exists & has a PIN set
       try {
-        const preCheckRes = await fetch('/api/auth/pre-check', {
+        const preCheckRes = await fetch(`${API_BASE_URL}/api/auth/pre-check`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: AbortSignal.timeout(6000),
@@ -286,7 +287,7 @@ export default function HomeLandingPage() {
     const formattedPhone = `+91${clean10Digits}`;
 
     try {
-      const response = await fetch('/api/auth/pin-login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/pin-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(15000),
@@ -331,7 +332,7 @@ export default function HomeLandingPage() {
 
       const idToken = await verifyOtp(confirmationResultRef.current, otpValue);
 
-      const response = await fetch('/api/auth/sync', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -397,7 +398,7 @@ export default function HomeLandingPage() {
     }
 
     try {
-      const response = await fetch('/api/auth/set-pin', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/set-pin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin: pinSetup })

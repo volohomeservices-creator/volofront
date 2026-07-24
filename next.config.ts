@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   compress: true,
   transpilePackages: ["@volo/shared-lib", "@volo/shared-types"],
   experimental: {
@@ -9,10 +8,7 @@ const nextConfig: NextConfig = {
     workerThreads: false,
     optimizePackageImports: ['lucide-react', 'date-fns', 'recharts', 'react-icons', 'lodash'],
   },
-  images: {
-    loader: "custom",
-    loaderFile: "./packages/shared-lib/src/lib/image-loader.ts",
-  },
+
   async rewrites() {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.voloapp.in';
     return [
@@ -33,7 +29,7 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          { key: "Content-Security-Policy", value: process.env.NODE_ENV === 'production' ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://maps.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https: wss:;" : "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https: blob: wss:;" }
+          { key: "Content-Security-Policy", value: "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https: blob: wss:;" }
         ]
       },
       {
