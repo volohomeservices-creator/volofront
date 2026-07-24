@@ -50,10 +50,12 @@ export default function HomeLandingPage() {
   const [selectedRole, setSelectedRole] = useState<'customer' | 'worker'>('customer');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpValue, setOtpValue] = useState('');
-  const [authStep, setAuthStep] = useState<'PHONE' | 'OTP' | 'SET_PIN'>('PHONE');
+  const [authStep, setAuthStep] = useState<'PHONE' | 'OTP' | 'SET_PIN' | 'ENTER_PIN'>('PHONE');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
+  const [resendCountdown, setResendCountdown] = useState(30);
+  const [inputPin, setInputPin] = useState('');
   const [pinSetup, setPinSetup] = useState('');
   const [pinLength, setPinLength] = useState<4 | 6>(4);
   const [redirectToUrl, setRedirectToUrl] = useState('');
@@ -75,6 +77,16 @@ export default function HomeLandingPage() {
       cleanupPhoneAuth();
     };
   }, []);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (authStep === 'OTP' && resendCountdown > 0) {
+      timer = setInterval(() => {
+        setResendCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [authStep, resendCountdown]);
 
   useEffect(() => {
     async function loadServicesCatalog() {
@@ -186,21 +198,44 @@ export default function HomeLandingPage() {
     setAuthSuccess(null);
     setAuthLoading(true);
 
-    const formattedPhone = phoneNumber.startsWith('+91') ? phoneNumber : `+91${phoneNumber}`;
-    if (!PHONE_REGEX.test(formattedPhone)) {
+    const clean10Digits = phoneNumber.replace(/\D/g, '').slice(-10);
+    const formattedPhone = `+91${clean10Digits}`;
+    if (clean10Digits.length !== 10) {
       setAuthError('Enter a valid 10-digit Indian mobile number');
       setAuthLoading(false);
       return;
     }
 
     try {
-      // Do NOT call cleanupEnterpriseRecaptcha() here, as it deletes window.grecaptcha
-      // which Firebase's RecaptchaVerifier strictly depends on!
-      // cleanupEnterpriseRecaptcha(); 
+      // 1. Pre-check if account exists & has a PIN set
+      try {
+        const preCheckRes = await fetch('/api/auth/pre-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(6000),
+          body: JSON.stringify({ phone: formattedPhone })
+        });
+
+        if (preCheckRes.ok) {
+          const preCheckData = await preCheckRes.json();
+          if (preCheckData.authMethod === 'pin_required' && preCheckData.isRegistered) {
+            // Existing member with PIN set -> Redirect directly to PIN login!
+            setInputPin('');
+            setAuthStep('ENTER_PIN');
+            setAuthLoading(false);
+            return;
+          }
+        }
+      } catch (preCheckErr) {
+        console.warn('[Pre-Check] Pre-check call failed/timed out, proceeding with OTP:', preCheckErr);
+      }
+
+      // 2. Send Firebase OTP for new user or account without PIN
       console.log("Sending OTP to:", formattedPhone);
       const result = await sendOtp(formattedPhone);
       confirmationResultRef.current = result;
       setAuthSuccess('Code sent successfully.');
+      setResendCountdown(30);
       setAuthStep('OTP');
     } catch (err: unknown) {
       console.error(err);
@@ -214,6 +249,64 @@ export default function HomeLandingPage() {
       } else {
         setAuthError('Could not send verification code. Please try again.');
       }
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCountdown > 0 || authLoading) return;
+    setAuthError(null);
+    setAuthSuccess(null);
+    setAuthLoading(true);
+
+    const clean10Digits = phoneNumber.replace(/\D/g, '').slice(-10);
+    const formattedPhone = `+91${clean10Digits}`;
+    try {
+      console.log("Resending OTP to:", formattedPhone);
+      const result = await sendOtp(formattedPhone);
+      confirmationResultRef.current = result;
+      setAuthSuccess('New verification code sent successfully.');
+      setResendCountdown(30);
+    } catch (err: unknown) {
+      console.error('Resend OTP error:', err);
+      setAuthError('Failed to resend code. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handlePinLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSuccess(null);
+    setAuthLoading(true);
+
+    const clean10Digits = phoneNumber.replace(/\D/g, '').slice(-10);
+    const formattedPhone = `+91${clean10Digits}`;
+
+    try {
+      const response = await fetch('/api/auth/pin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({
+          phone: formattedPhone,
+          pin: inputPin
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setAuthError(data.error || 'Invalid PIN. Please check and try again.');
+        return;
+      }
+
+      setAuthSuccess('Login successful! Redirecting...');
+      const targetUrl = data.redirectTo || (selectedRole === 'worker' ? '/worker/dashboard' : '/customer/dashboard');
+      window.location.replace(targetUrl);
+    } catch (err: any) {
+      setAuthError(err?.message || 'PIN verification failed. Please try again.');
     } finally {
       setAuthLoading(false);
     }
@@ -243,6 +336,7 @@ export default function HomeLandingPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: AbortSignal.timeout(15000),
         body: JSON.stringify({
           idToken,
           role: selectedRole
@@ -1982,6 +2076,24 @@ export default function HomeLandingPage() {
                   />
                 </div>
 
+                <div className="flex items-center justify-between text-xs text-slate-800 font-medium px-1">
+                  <span>Didn&apos;t receive code?</span>
+                  {resendCountdown > 0 ? (
+                    <span className="text-slate-600 font-semibold select-none">
+                      Resend in {resendCountdown}s
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      disabled={authLoading}
+                      className="text-slate-950 font-bold underline hover:text-black cursor-pointer"
+                    >
+                      Resend Code
+                    </button>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   disabled={authLoading || otpValue.length !== 6}
@@ -2007,6 +2119,67 @@ export default function HomeLandingPage() {
                   suppressHydrationWarning
                 >
                   Change Phone Number
+                </button>
+              </form>
+            )}
+
+            {authStep === 'ENTER_PIN' && (
+              <form onSubmit={handlePinLogin} className="space-y-6">
+                <p className="text-xs text-slate-900 max-w-xs mx-auto leading-relaxed text-center font-medium">
+                  Welcome back! Enter your security PIN to log in.
+                </p>
+
+                <div className="border-b border-slate-950/20 focus-within:border-slate-950 transition-colors py-1 text-center">
+                  <input
+                    type="password"
+                    aria-label="Security PIN"
+                    maxLength={6}
+                    placeholder="Enter Security PIN"
+                    value={inputPin}
+                    onChange={(e) => setInputPin(e.target.value.replace(/\D/g, ''))}
+                    className="w-full !bg-transparent !border-none py-2.5 text-center tracking-[0.5em] text-sm outline-none text-slate-950 placeholder-slate-600 font-bold font-mono"
+                    required
+                    suppressHydrationWarning
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading || inputPin.length < 4}
+                  className="w-full bg-[#D3D9D4]/90 hover:bg-[#D3D9D4] disabled:bg-slate-300 text-slate-955 font-bold rounded-full py-4 text-xs uppercase tracking-wider transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                  suppressHydrationWarning
+                >
+                  {authLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin mx-auto text-slate-950" />
+                  ) : (
+                    'Log In with PIN'
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setAuthError(null);
+                    setAuthSuccess(null);
+                    setAuthLoading(true);
+                    try {
+                      const clean10Digits = phoneNumber.replace(/\D/g, '').slice(-10);
+                      const formattedPhone = `+91${clean10Digits}`;
+                      const result = await sendOtp(formattedPhone);
+                      confirmationResultRef.current = result;
+                      setAuthSuccess('Code sent successfully.');
+                      setResendCountdown(30);
+                      setAuthStep('OTP');
+                    } catch (e) {
+                      setAuthError('Could not send OTP. Try again.');
+                    } finally {
+                      setAuthLoading(false);
+                    }
+                  }}
+                  className="w-full bg-white/30 hover:bg-white/45 text-slate-900 border border-white/30 font-bold rounded-full py-3.5 text-xs uppercase tracking-wider transition-all cursor-pointer text-center"
+                  suppressHydrationWarning
+                >
+                  Log In with OTP Instead
                 </button>
               </form>
             )}
