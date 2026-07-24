@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+
   compress: true,
   transpilePackages: ["@volo/shared-lib", "@volo/shared-types"],
   experimental: {
