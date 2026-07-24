@@ -249,10 +249,21 @@ export default function HomeLandingPage() {
         })
       });
 
-      const data = await response.json();
+      let data: any;
+      try {
+        const text = await response.text();
+        data = JSON.parse(text);
+      } catch (jsonErr) {
+        if (response.status === 503 || response.status === 502) {
+          setAuthError('Backend service is temporarily restarting. Please wait a few seconds and try again.');
+        } else {
+          setAuthError('Server communication error. Please try again.');
+        }
+        return;
+      }
 
       if (!response.ok) {
-        const errCode = data.error || 'FIREBASE_TOKEN_INVALID';
+        const errCode = data?.error || 'FIREBASE_TOKEN_INVALID';
         mapServerErrors(errCode);
         return;
       }
@@ -272,7 +283,7 @@ export default function HomeLandingPage() {
       } else if (firebaseError.code === 'auth/code-expired') {
         setAuthError('OTP expired. Request a new one.');
       } else {
-        setAuthError('Incorrect OTP code.');
+        setAuthError((err as Error)?.message || 'Verification failed. Please try again.');
       }
     } finally {
       setAuthLoading(false);
