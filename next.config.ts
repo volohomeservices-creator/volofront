@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   compress: true,
   transpilePackages: ["@volo/shared-lib", "@volo/shared-types"],
   experimental: {
+    cpus: 1,
+    workerThreads: false,
     optimizePackageImports: ['lucide-react', 'date-fns', 'recharts', 'react-icons', 'lodash'],
   },
   images: {
